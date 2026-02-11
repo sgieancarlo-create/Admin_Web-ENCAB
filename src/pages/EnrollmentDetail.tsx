@@ -378,7 +378,7 @@ export default function EnrollmentDetail() {
               <div>
                 <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-white/70">
                   <School size={14} strokeWidth={2} />
-                  High School
+                  Senior High School
                 </h3>
                 <ul className="space-y-2 text-sm text-slate-200">
                   {sb.highSchool.map((r, i) => (
