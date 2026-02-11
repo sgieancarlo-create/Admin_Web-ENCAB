@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? 'https://backend-encab.vercel.app/api' : 'https://backend-encab.vercel.app/api');
 
 export function getToken(): string | null {
   return localStorage.getItem('admin_token');
