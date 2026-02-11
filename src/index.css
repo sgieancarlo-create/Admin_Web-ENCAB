@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+/* Maroon theme to match mobile app */
+@theme {
+  --color-maroon: #60100B;
+  --color-maroon-accent: #C41E3A;
+  --color-maroon-dark: #1f0806;
+  --color-maroon-card: #2d0a08;
+}
+
+@layer base {
+  body {
+    @apply min-h-screen bg-maroon-dark text-slate-200 antialiased;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  a {
+    @apply text-maroon-accent;
+  }
+  a:hover {
+    @apply underline;
+  }
+  button {
+    @apply cursor-pointer;
+    font-family: inherit;
+  }
+  /* Dropdown options: dark text on light background so they're readable when menu opens */
+  option {
+    background: #fff;
+    color: #1e293b;
+  }
+}
+
+@layer components {
+  .app-loading {
+    @apply flex min-h-screen items-center justify-center text-white/70;
+  }
+  #root {
+    @apply min-h-screen;
+  }
+}

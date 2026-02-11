@@ -1,0 +1,471 @@
+import { useEffect, useState } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import {
+  ArrowLeft,
+  User,
+  Mail,
+  Phone,
+  Calendar,
+  MapPin,
+  Users,
+  UserCircle,
+  GraduationCap,
+  School,
+  FileText,
+  ExternalLink,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Loader2,
+} from 'lucide-react';
+import {
+  getEnrollment,
+  getDocuments,
+  updateEnrollmentStatus,
+} from '../lib/api';
+
+type BasicInfo = {
+  lastName?: string;
+  firstName?: string;
+  middleName?: string;
+  suffix?: string;
+  birthdate?: string;
+  birthPlace?: string;
+  gender?: string;
+  motherName?: string;
+  fatherName?: string;
+  guardianName?: string;
+  guardianContact?: string;
+};
+
+type SchoolRecord = {
+  schoolName?: string;
+  location?: string;
+  yearFrom?: string;
+  yearTo?: string;
+};
+type SchoolBackground = {
+  elementary?: SchoolRecord[];
+  juniorHigh?: SchoolRecord[];
+  highSchool?: SchoolRecord[];
+};
+
+type Enrollment = {
+  id: string;
+  user_id: string;
+  status: string;
+  studentName: string;
+  email: string;
+  username: string;
+  contact_no: string | null;
+  profile_picture_url: string | null;
+  basic_info: BasicInfo;
+  school_background: SchoolBackground;
+  submitted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type Doc = {
+  id: string;
+  name: string;
+  type: string;
+  url: string;
+  status: string;
+  remarks: string | null;
+};
+
+const statusBadgeClass: Record<string, string> = {
+  pending: 'bg-amber-500/20 text-amber-400',
+  approved: 'bg-emerald-500/20 text-emerald-400',
+  rejected: 'bg-red-500/20 text-red-400',
+  draft: 'bg-slate-500/20 text-slate-400',
+};
+
+export default function EnrollmentDetail() {
+  const { id } = useParams<{ id: string }>();
+  const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
+  const [documents, setDocuments] = useState<Doc[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [updating, setUpdating] = useState(false);
+  const [confirmStatus, setConfirmStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    getEnrollment(id)
+      .then((enr) => {
+        setEnrollment(enr);
+        return getDocuments(enr.user_id).catch(() => []);
+      })
+      .then((docs) => setDocuments(Array.isArray(docs) ? docs : []))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  async function setStatus(status: string) {
+    if (!id) return;
+    setConfirmStatus(null);
+    setUpdating(true);
+    try {
+      await updateEnrollmentStatus(id, status);
+      setEnrollment((prev) => (prev ? { ...prev, status } : null));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to update');
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  const statusConfirmLabel: Record<string, string> = {
+    approved: 'approve',
+    rejected: 'reject',
+    pending: 'set to pending',
+  };
+
+  if (loading || !id) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-20">
+        <Loader2
+          className="h-10 w-10 animate-spin text-maroon-accent"
+          strokeWidth={2}
+        />
+        <span className="text-sm text-white/60">Loading enrollment…</span>
+      </div>
+    );
+  }
+  if (error && !enrollment) {
+    return (
+      <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-6 py-8 text-red-400">
+        {error}
+      </div>
+    );
+  }
+  if (!enrollment) {
+    return (
+      <div className="rounded-xl border border-white/10 bg-white/5 px-6 py-8 text-center text-white/70">
+        Enrollment not found.
+      </div>
+    );
+  }
+
+  const bi = enrollment.basic_info || {};
+  const sb = enrollment.school_background || {};
+  const profilePic = enrollment.profile_picture_url;
+
+  return (
+    <div className="max-w-[1200px]">
+      {/* Back link - full width */}
+      <Link
+        to="/enrollments"
+        className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-maroon-accent no-underline transition-colors hover:no-underline hover:text-maroon-accent/90"
+      >
+        <ArrowLeft size={18} strokeWidth={2} />
+        Back to Enrollments
+      </Link>
+
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_400px] lg:items-start">
+        {/* Left: profile + basic info + school */}
+        <div className="min-w-0 space-y-6">
+      {/* Profile header card */}
+      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-xl">
+        <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:gap-8">
+          <div className="flex shrink-0 justify-center sm:justify-start">
+            {profilePic ? (
+              <img
+                src={profilePic}
+                alt={enrollment.studentName}
+                className="h-24 w-24 rounded-2xl object-cover ring-2 ring-white/10"
+              />
+            ) : (
+              <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-maroon-accent/20 text-maroon-accent ring-2 ring-white/10">
+                <UserCircle size={48} strokeWidth={1.5} />
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h1 className="mb-1 text-2xl font-bold tracking-tight text-slate-100">
+              {enrollment.studentName}
+            </h1>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/60">
+              <span className="flex items-center gap-1.5">
+                <Mail size={14} strokeWidth={2} />
+                {enrollment.email}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Phone size={14} strokeWidth={2} />
+                {enrollment.contact_no || '—'}
+              </span>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold uppercase tracking-wide ${
+                  statusBadgeClass[enrollment.status] ??
+                  'bg-white/10 text-white/70'
+                }`}
+              >
+                {enrollment.status === 'pending' && (
+                  <Clock size={14} strokeWidth={2} />
+                )}
+                {enrollment.status === 'approved' && (
+                  <CheckCircle2 size={14} strokeWidth={2} />
+                )}
+                {enrollment.status === 'rejected' && (
+                  <XCircle size={14} strokeWidth={2} />
+                )}
+                {enrollment.status}
+              </span>
+              <div className="flex gap-2">
+                {enrollment.status !== 'approved' && (
+                  <button
+                    onClick={() => setConfirmStatus('approved')}
+                    disabled={updating}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <CheckCircle2 size={16} strokeWidth={2} />
+                    Approve
+                  </button>
+                )}
+                {enrollment.status !== 'rejected' && (
+                  <button
+                    onClick={() => setConfirmStatus('rejected')}
+                    disabled={updating}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:bg-red-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <XCircle size={16} strokeWidth={2} />
+                    Reject
+                  </button>
+                )}
+                {enrollment.status !== 'pending' && (
+                  <button
+                    onClick={() => setConfirmStatus('pending')}
+                    disabled={updating}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-maroon-accent px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <Clock size={16} strokeWidth={2} />
+                    Set Pending
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+        {/* Status change confirmation modal */}
+        {confirmStatus && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setConfirmStatus(null)}>
+            <div className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-slate-900 p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <p className="text-slate-200">
+                Are you sure you want to <strong className="text-white">{statusConfirmLabel[confirmStatus]}</strong> this enrollment?
+              </p>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setConfirmStatus(null)}
+                  className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatus(confirmStatus)}
+                  disabled={updating}
+                  className="rounded-xl bg-maroon-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                >
+                  {updating ? 'Updating…' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Basic Information */}
+        <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-xl">
+          <div className="flex items-center gap-3 border-b border-white/[0.06] bg-white/[0.03] px-6 py-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-maroon-accent/20 text-maroon-accent">
+              <User size={20} strokeWidth={2} />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-200">
+              Basic Information
+            </h2>
+          </div>
+          <div className="p-6">
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-[140px_1fr]">
+              <Row label="Full name" icon={User}>
+                {[bi.firstName, bi.middleName, bi.lastName, bi.suffix]
+                  .filter(Boolean)
+                  .join(' ') || '—'}
+              </Row>
+              <Row label="Birthdate" icon={Calendar}>
+                {bi.birthdate || '—'}
+              </Row>
+              <Row label="Birth place" icon={MapPin}>
+                {bi.birthPlace || '—'}
+              </Row>
+              <Row label="Gender">{bi.gender || '—'}</Row>
+              <Row label="Mother" icon={Users}>{bi.motherName || '—'}</Row>
+              <Row label="Father" icon={Users}>{bi.fatherName || '—'}</Row>
+              <Row label="Guardian" icon={Users}>
+                {bi.guardianName || '—'}
+              </Row>
+              <Row label="Guardian contact" icon={Phone}>
+                {bi.guardianContact || '—'}
+              </Row>
+            </dl>
+          </div>
+        </section>
+
+        {/* School Background */}
+        <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-xl">
+          <div className="flex items-center gap-3 border-b border-white/[0.06] bg-white/[0.03] px-6 py-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400">
+              <GraduationCap size={20} strokeWidth={2} />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-200">
+              School Background
+            </h2>
+          </div>
+          <div className="p-6">
+            {sb.elementary?.length ? (
+              <div className="mb-5">
+                <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-white/70">
+                  <School size={14} strokeWidth={2} />
+                  Elementary
+                </h3>
+                <ul className="space-y-2 text-sm text-slate-200">
+                  {sb.elementary.map((r, i) => (
+                    <li
+                      key={i}
+                      className="flex items-start gap-2 rounded-lg bg-white/[0.03] px-4 py-3"
+                    >
+                      <span className="font-medium">{r.schoolName}</span>
+                      <span className="text-white/50">—</span>
+                      <span>{r.location || '—'}</span>
+                      <span className="text-white/50">
+                        ({r.yearFrom}–{r.yearTo})
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {sb.juniorHigh?.length ? (
+              <div className="mb-5">
+                <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-white/70">
+                  <School size={14} strokeWidth={2} />
+                  Junior High
+                </h3>
+                <ul className="space-y-2 text-sm text-slate-200">
+                  {sb.juniorHigh.map((r, i) => (
+                    <li
+                      key={i}
+                      className="flex items-start gap-2 rounded-lg bg-white/[0.03] px-4 py-3"
+                    >
+                      <span className="font-medium">{r.schoolName}</span>
+                      <span className="text-white/50">—</span>
+                      <span>{r.location || '—'}</span>
+                      <span className="text-white/50">
+                        ({r.yearFrom}–{r.yearTo})
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {sb.highSchool?.length ? (
+              <div>
+                <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-white/70">
+                  <School size={14} strokeWidth={2} />
+                  High School
+                </h3>
+                <ul className="space-y-2 text-sm text-slate-200">
+                  {sb.highSchool.map((r, i) => (
+                    <li
+                      key={i}
+                      className="flex items-start gap-2 rounded-lg bg-white/[0.03] px-4 py-3"
+                    >
+                      <span className="font-medium">{r.schoolName}</span>
+                      <span className="text-white/50">—</span>
+                      <span>{r.location || '—'}</span>
+                      <span className="text-white/50">
+                        ({r.yearFrom}–{r.yearTo})
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {!sb.elementary?.length &&
+              !sb.juniorHigh?.length &&
+              !sb.highSchool?.length && (
+                <p className="m-0 flex items-center gap-2 text-sm text-white/50">
+                  <School size={16} strokeWidth={2} />
+                  No school background provided.
+                </p>
+              )}
+          </div>
+        </section>
+        </div>
+
+        {/* Right: Documents sidebar - sticky so it stays visible */}
+        <aside className="lg:sticky lg:top-24">
+          <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.04] shadow-xl">
+            <div className="flex items-center gap-3 border-b border-white/[0.06] bg-white/[0.03] px-6 py-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-500/20 text-slate-400">
+                <FileText size={20} strokeWidth={2} />
+              </div>
+              <h2 className="text-lg font-semibold text-slate-200">Documents</h2>
+            </div>
+            <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-6">
+              {documents.length === 0 ? (
+                <p className="m-0 flex items-center gap-2 text-sm text-white/50">
+                  <FileText size={16} strokeWidth={2} />
+                  No documents uploaded.
+                </p>
+              ) : (
+                <ul className="m-0 list-none space-y-2 p-0">
+                  {documents.map((d) => (
+                    <li key={d.id}>
+                      <a
+                        href={d.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 rounded-xl bg-white/[0.03] px-4 py-3 text-sm font-medium text-maroon-accent no-underline transition-colors hover:bg-maroon-accent/15 hover:no-underline"
+                      >
+                        <FileText size={18} strokeWidth={2} className="shrink-0 text-white/50" />
+                        <span className="min-w-0 flex-1 truncate">{d.name}</span>
+                        <ExternalLink size={16} strokeWidth={2} className="shrink-0" />
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function Row({
+  label,
+  icon: Icon,
+  children,
+}: {
+  label: string;
+  icon?: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      <dt className="flex items-center gap-2 font-medium text-white/50">
+        {Icon && <Icon size={14} strokeWidth={2} />}
+        {label}
+      </dt>
+      <dd className="m-0 text-slate-200">{children}</dd>
+    </>
+  );
+}
