@@ -43,6 +43,7 @@ type BasicInfo = {
   fatherName?: string;
   guardianName?: string;
   guardianContact?: string;
+  studentType?: string;
 };
 
 type SchoolRecord = {
@@ -376,6 +377,13 @@ export default function EnrollmentDetail() {
               {enrollment.school_year && (
                 <span className="rounded-xl bg-slate-500/20 px-3 py-1.5 text-xs font-semibold text-slate-400">
                   SY {enrollment.school_year}
+                </span>
+              )}
+              {(bi as any).studentType && (
+                <span className="rounded-xl bg-sky-500/20 px-3 py-1.5 text-xs font-semibold text-sky-300">
+                  {String((bi as any).studentType).toLowerCase() === 'transferee'
+                    ? 'Transferee'
+                    : 'New student'}
                 </span>
               )}
               {isArchived ? (
