@@ -3,11 +3,11 @@ import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   ClipboardList,
+  Archive,
   User,
   LogOut,
   Menu,
   X,
-  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -46,6 +46,10 @@ export default function Layout() {
         <ClipboardList size={iconSize} strokeWidth={2} aria-hidden />
         Enrollments
       </Link>
+      <Link to="/archive" className={navLinkClass('/archive')} onClick={() => setMobileNavOpen(false)}>
+        <Archive size={iconSize} strokeWidth={2} aria-hidden />
+        Archive
+      </Link>
     </>
   );
 
@@ -70,7 +74,6 @@ export default function Layout() {
                 Registrar Admin
               </span>
               <span className="flex items-center gap-1 text-xs font-medium text-white/60">
-                <ShieldCheck size={12} strokeWidth={2} />
                 Admin panel
               </span>
             </div>
