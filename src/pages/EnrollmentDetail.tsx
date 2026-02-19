@@ -146,6 +146,7 @@ export default function EnrollmentDetail() {
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [emailSuccess, setEmailSuccess] = useState('');
   const [updating, setUpdating] = useState(false);
   const [confirmStatus, setConfirmStatus] = useState<string | null>(null);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
@@ -249,8 +250,10 @@ export default function EnrollmentDetail() {
       });
       setShowEmailModal(false);
       setEmailFile(null);
+      setEmailSuccess(`Email sent to ${enrollment?.email || 'student'}.`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to send email');
+      setEmailSuccess('');
     } finally {
       setSendingEmail(false);
     }
@@ -304,6 +307,11 @@ export default function EnrollmentDetail() {
 
   return (
     <div className="max-w-[1200px]">
+      {emailSuccess && (
+        <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+          {emailSuccess}
+        </div>
+      )}
       {/* Back link - full width */}
       <Link
         to={isArchived ? '/archive' : '/enrollments'}
