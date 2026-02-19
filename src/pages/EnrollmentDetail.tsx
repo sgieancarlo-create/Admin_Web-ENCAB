@@ -148,6 +148,7 @@ export default function EnrollmentDetail() {
   const [error, setError] = useState('');
   const [emailSuccess, setEmailSuccess] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [previewDoc, setPreviewDoc] = useState<Doc | null>(null);
   const [confirmStatus, setConfirmStatus] = useState<string | null>(null);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
   const [archiveSchoolYear, setArchiveSchoolYear] = useState(SCHOOL_YEAR_OPTIONS[1]);
@@ -797,16 +798,33 @@ export default function EnrollmentDetail() {
                 <ul className="m-0 list-none space-y-2 p-0">
                   {documents.map((d) => (
                     <li key={d.id}>
-                      <a
-                        href={d.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-3 rounded-xl bg-white/[0.03] px-4 py-3 text-sm font-medium text-maroon-accent no-underline transition-colors hover:bg-maroon-accent/15 hover:no-underline"
-                      >
+                      <div className="flex items-center gap-3 rounded-xl bg-white/[0.03] px-4 py-3 text-sm text-slate-200">
                         <FileText size={18} strokeWidth={2} className="shrink-0 text-white/50" />
-                        <span className="min-w-0 flex-1 truncate">{d.name}</span>
-                        <ExternalLink size={16} strokeWidth={2} className="shrink-0" />
-                      </a>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium text-slate-100">{d.name}</div>
+                          <div className="mt-0.5 text-xs text-slate-400 truncate">
+                            {d.type || 'Document'}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewDoc(d)}
+                            className="rounded-lg border border-white/20 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-100 hover:bg-white/10"
+                          >
+                            Preview
+                          </button>
+                          <a
+                            href={d.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 rounded-lg border border-white/20 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-maroon-accent hover:bg-maroon-accent/15"
+                          >
+                            <ExternalLink size={14} strokeWidth={2} />
+                            Download
+                          </a>
+                        </div>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -815,6 +833,73 @@ export default function EnrollmentDetail() {
           </section>
         </aside>
       </div>
+
+      {/* Document preview modal */}
+      {previewDoc && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setPreviewDoc(null)}
+        >
+          <div
+            className="w-full max-w-3xl rounded-2xl border border-white/[0.1] bg-slate-950/95 p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="truncate text-base font-semibold text-white">
+                  {previewDoc.name}
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  {previewDoc.type || 'Document preview'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewDoc.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-maroon-accent hover:bg-maroon-accent/15"
+                >
+                  <ExternalLink size={14} strokeWidth={2} />
+                  Open in new tab
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDoc(null)}
+                  className="rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-2 max-h-[70vh] overflow-hidden rounded-xl border border-white/10 bg-black/60">
+              {previewDoc.type?.startsWith('image/') ? (
+                <img
+                  src={previewDoc.url}
+                  alt={previewDoc.name}
+                  className="max-h-[70vh] w-full object-contain"
+                />
+              ) : previewDoc.type === 'application/pdf' ? (
+                <iframe
+                  src={previewDoc.url}
+                  title={previewDoc.name}
+                  className="h-[70vh] w-full border-0"
+                />
+              ) : (
+                <div className="flex h-64 flex-col items-center justify-center gap-3 px-4 text-center text-sm text-slate-300">
+                  <FileText size={28} strokeWidth={2} className="text-white/50" />
+                  <p>
+                    Preview is not available for this file type. Use{' '}
+                    <span className="font-semibold text-maroon-accent">Open in new tab</span> to
+                    view or download.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
