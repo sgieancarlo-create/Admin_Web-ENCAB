@@ -74,6 +74,64 @@ export async function getDocuments(userId: string) {
   return data.data;
 }
 
+export async function getArchivedSchoolYears(): Promise<string[]> {
+  const res = await fetch(`${API_URL}/admin/archived-enrollments/school-years`, { headers: getHeaders() });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to load school years');
+  return data.data ?? [];
+}
+
+export async function getArchivedEnrollments(schoolYear?: string) {
+  const url = schoolYear
+    ? `${API_URL}/admin/archived-enrollments?school_year=${encodeURIComponent(schoolYear)}`
+    : `${API_URL}/admin/archived-enrollments`;
+  const res = await fetch(url, { headers: getHeaders() });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to load archived enrollments');
+  return data.data;
+}
+
+export async function archiveEnrollment(id: string, schoolYear: string) {
+  const res = await fetch(`${API_URL}/admin/enrollments/${id}/archive`, {
+    method: 'PATCH',
+    headers: getHeaders(),
+    body: JSON.stringify({ school_year: schoolYear }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to archive enrollment');
+  return data.data;
+}
+
+export async function deleteEnrollment(id: string) {
+  const res = await fetch(`${API_URL}/admin/enrollments/${id}`, {
+    method: 'DELETE',
+    headers: getHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to delete enrollment');
+  return data;
+}
+
+export async function sendEnrollmentEmail(
+  enrollmentId: string,
+  payload: {
+    type: 'approved' | 'rejected' | 'incomplete';
+    subject: string;
+    body: string;
+    attachmentName?: string;
+    attachmentBase64?: string;
+  }
+) {
+  const res = await fetch(`${API_URL}/admin/enrollments/${enrollmentId}/send-email`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to send email');
+  return data.data;
+}
+
 export function setToken(token: string) {
   localStorage.setItem('admin_token', token);
 }
