@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   User,
@@ -17,11 +17,18 @@ import {
   XCircle,
   Clock,
   Loader2,
+  Archive,
+  Trash2,
+  Send,
+  Paperclip,
 } from 'lucide-react';
 import {
   getEnrollment,
   getDocuments,
   updateEnrollmentStatus,
+  archiveEnrollment,
+  deleteEnrollment,
+  sendEnrollmentEmail,
 } from '../lib/api';
 
 type BasicInfo = {
@@ -62,6 +69,8 @@ type Enrollment = {
   basic_info: BasicInfo;
   school_background: SchoolBackground;
   submitted_at: string | null;
+  archived_at: string | null;
+  school_year: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -82,14 +91,72 @@ const statusBadgeClass: Record<string, string> = {
   draft: 'bg-slate-500/20 text-slate-400',
 };
 
+const SCHOOL_YEAR_OPTIONS = ['2024-2025', '2025-2026', '2026-2027', '2027-2028'];
+
+const EMAIL_TEMPLATES: Record<string, { subject: string; body: string }> = {
+  approved: {
+    subject: 'Enrollment Approved – Next Steps',
+    body: `Dear Student,
+
+Your enrollment application has been APPROVED.
+
+Please complete the following by the deadline (fill in deadline):
+• [Instructions – type here]
+• [Any requirements – type here]
+
+You may contact the registrar office for questions.
+
+Registrar Office`,
+  },
+  incomplete: {
+    subject: 'Enrollment – Incomplete Requirements',
+    body: `Dear Student,
+
+Your enrollment application is missing some requirements.
+
+Missing requirements:
+• [List what is missing – type here]
+
+How to resubmit:
+• [Instructions – type here]
+
+Please submit the missing documents by [deadline].
+
+Registrar Office`,
+  },
+  rejected: {
+    subject: 'Enrollment Application – Update',
+    body: `Dear Student,
+
+Your enrollment application could not be approved at this time.
+
+Reason: [Specify cause – e.g. invalid document, incomplete grades, duplicate record]
+
+You may reapply or correct your submission. Instructions:
+• [Type instructions here]
+
+Registrar Office`,
+  },
+};
+
 export default function EnrollmentDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updating, setUpdating] = useState(false);
   const [confirmStatus, setConfirmStatus] = useState<string | null>(null);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archiveSchoolYear, setArchiveSchoolYear] = useState(SCHOOL_YEAR_OPTIONS[1]);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailType, setEmailType] = useState<'approved' | 'rejected' | 'incomplete'>('approved');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [emailFile, setEmailFile] = useState<{ name: string; base64: string } | null>(null);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -123,6 +190,87 @@ export default function EnrollmentDetail() {
     rejected: 'reject',
     pending: 'set to pending',
   };
+
+  const isArchived = !!(enrollment && enrollment.archived_at);
+
+  async function handleArchive() {
+    if (!id) return;
+    setShowArchiveModal(false);
+    setUpdating(true);
+    try {
+      await archiveEnrollment(id, archiveSchoolYear);
+      navigate('/archive');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to archive');
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!id) return;
+    setShowDeleteConfirm(false);
+    setUpdating(true);
+    try {
+      await deleteEnrollment(id);
+      navigate('/enrollments');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete');
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  function openEmailModal(type: 'approved' | 'rejected' | 'incomplete' = 'approved') {
+    setEmailType(type);
+    const t = EMAIL_TEMPLATES[type];
+    setEmailSubject(t.subject);
+    setEmailBody(t.body);
+    setEmailFile(null);
+    setShowEmailModal(true);
+  }
+
+  function onEmailTypeChange(type: 'approved' | 'rejected' | 'incomplete') {
+    setEmailType(type);
+    const t = EMAIL_TEMPLATES[type];
+    setEmailSubject(t.subject);
+    setEmailBody(t.body);
+  }
+
+  async function handleSendEmail() {
+    if (!id || !emailSubject.trim() || !emailBody.trim()) return;
+    setSendingEmail(true);
+    try {
+      await sendEnrollmentEmail(id, {
+        type: emailType,
+        subject: emailSubject.trim(),
+        body: emailBody.trim(),
+        ...(emailFile && { attachmentName: emailFile.name, attachmentBase64: emailFile.base64 }),
+      });
+      setShowEmailModal(false);
+      setEmailFile(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to send email');
+    } finally {
+      setSendingEmail(false);
+    }
+  }
+
+  function onEmailFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Attachment must be under 10MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      setEmailFile({ name: file.name, base64 });
+    };
+    reader.readAsDataURL(file);
+  }
 
   if (loading || !id) {
     return (
@@ -158,11 +306,11 @@ export default function EnrollmentDetail() {
     <div className="max-w-[1200px]">
       {/* Back link - full width */}
       <Link
-        to="/enrollments"
+        to={isArchived ? '/archive' : '/enrollments'}
         className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-maroon-accent no-underline transition-colors hover:no-underline hover:text-maroon-accent/90"
       >
         <ArrowLeft size={18} strokeWidth={2} />
-        Back to Enrollments
+        {isArchived ? 'Back to Archive' : 'Back to Enrollments'}
       </Link>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_400px] lg:items-start">
@@ -216,38 +364,87 @@ export default function EnrollmentDetail() {
                 )}
                 {enrollment.status}
               </span>
-              <div className="flex gap-2">
-                {enrollment.status !== 'approved' && (
+              {enrollment.school_year && (
+                <span className="rounded-xl bg-slate-500/20 px-3 py-1.5 text-xs font-semibold text-slate-400">
+                  SY {enrollment.school_year}
+                </span>
+              )}
+              {isArchived ? (
+                <>
+                  <span className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-400">
+                    Archived — view only
+                  </span>
                   <button
-                    onClick={() => setConfirmStatus('approved')}
+                    onClick={() => openEmailModal()}
                     disabled={updating}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/50 bg-sky-500/20 px-4 py-2 text-sm font-semibold text-sky-300 transition-colors hover:bg-sky-500/30 disabled:opacity-60"
                   >
-                    <CheckCircle2 size={16} strokeWidth={2} />
-                    Approve
+                    <Send size={16} strokeWidth={2} />
+                    Email student
                   </button>
-                )}
-                {enrollment.status !== 'rejected' && (
-                  <button
-                    onClick={() => setConfirmStatus('rejected')}
-                    disabled={updating}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:bg-red-500 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    <XCircle size={16} strokeWidth={2} />
-                    Reject
-                  </button>
-                )}
-                {enrollment.status !== 'pending' && (
-                  <button
-                    onClick={() => setConfirmStatus('pending')}
-                    disabled={updating}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-maroon-accent px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    <Clock size={16} strokeWidth={2} />
-                    Set Pending
-                  </button>
-                )}
-              </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    {enrollment.status !== 'approved' && (
+                      <button
+                        onClick={() => setConfirmStatus('approved')}
+                        disabled={updating}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <CheckCircle2 size={16} strokeWidth={2} />
+                        Approve
+                      </button>
+                    )}
+                    {enrollment.status !== 'rejected' && (
+                      <button
+                        onClick={() => setConfirmStatus('rejected')}
+                        disabled={updating}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:bg-red-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <XCircle size={16} strokeWidth={2} />
+                        Reject
+                      </button>
+                    )}
+                    {enrollment.status !== 'pending' && (
+                      <button
+                        onClick={() => setConfirmStatus('pending')}
+                        disabled={updating}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-maroon-accent px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <Clock size={16} strokeWidth={2} />
+                        Set Pending
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2 border-l border-white/20 pl-3">
+                    <button
+                      onClick={() => openEmailModal()}
+                      disabled={updating}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-sky-500/50 bg-sky-500/20 px-4 py-2 text-sm font-semibold text-sky-300 transition-colors hover:bg-sky-500/30 disabled:opacity-60"
+                    >
+                      <Send size={16} strokeWidth={2} />
+                      Email student
+                    </button>
+                    <button
+                      onClick={() => setShowArchiveModal(true)}
+                      disabled={updating}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-500/50 bg-slate-500/20 px-4 py-2 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-500/30 disabled:opacity-60"
+                    >
+                      <Archive size={16} strokeWidth={2} />
+                      Archive
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      disabled={updating}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/40 bg-red-500/20 px-4 py-2 text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/30 disabled:opacity-60"
+                    >
+                      <Trash2 size={16} strokeWidth={2} />
+                      Delete
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -275,6 +472,170 @@ export default function EnrollmentDetail() {
                   className="rounded-xl bg-maroon-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
                 >
                   {updating ? 'Updating…' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Archive modal */}
+        {showArchiveModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowArchiveModal(false)}>
+            <div className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-slate-900 p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-semibold text-white">Archive enrollment</h3>
+              <p className="mt-2 text-sm text-slate-300">
+                Move this enrollment to the archive. It will be read-only and organized by school year.
+              </p>
+              <label className="mt-4 block text-sm font-medium text-slate-300">School year</label>
+              <select
+                value={archiveSchoolYear}
+                onChange={(e) => setArchiveSchoolYear(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm text-slate-200 focus:border-maroon-accent focus:outline-none focus:ring-2 focus:ring-maroon-accent/25"
+              >
+                {SCHOOL_YEAR_OPTIONS.map((sy) => (
+                  <option key={sy} value={sy}>SY {sy}</option>
+                ))}
+              </select>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowArchiveModal(false)}
+                  className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleArchive}
+                  disabled={updating}
+                  className="rounded-xl bg-maroon-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                >
+                  {updating ? 'Archiving…' : 'Archive'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete confirmation modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowDeleteConfirm(false)}>
+            <div className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-slate-900 p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-semibold text-white">Delete enrollment</h3>
+              <p className="mt-2 text-sm text-slate-300">
+                Permanently delete this enrollment? This cannot be undone. Use Archive instead if you want to keep a read-only record.
+              </p>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={updating}
+                  className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-60"
+                >
+                  {updating ? 'Deleting…' : 'Delete permanently'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Email student modal */}
+        {showEmailModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto" onClick={() => setShowEmailModal(false)}>
+            <div className="w-full max-w-lg rounded-2xl border border-white/[0.08] bg-slate-900 p-6 shadow-xl my-8" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Mail size={20} strokeWidth={2} />
+                Email student
+              </h3>
+              <p className="mt-1 text-sm text-slate-400">To: {enrollment.email}</p>
+
+              <label className="mt-4 block text-sm font-medium text-slate-300">Email type</label>
+              <select
+                value={emailType}
+                onChange={(e) => onEmailTypeChange(e.target.value as 'approved' | 'rejected' | 'incomplete')}
+                className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm text-slate-200 focus:border-maroon-accent focus:outline-none focus:ring-2 focus:ring-maroon-accent/25"
+              >
+                <option value="approved">Approved – confirmation & instructions</option>
+                <option value="incomplete">Incomplete – missing requirements & resubmit</option>
+                <option value="rejected">Rejected – reason & reapply instructions</option>
+              </select>
+
+              <label className="mt-4 block text-sm font-medium text-slate-300">Subject</label>
+              <input
+                type="text"
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:border-maroon-accent focus:outline-none focus:ring-2 focus:ring-maroon-accent/25"
+                placeholder="Email subject"
+              />
+
+              <label className="mt-4 block text-sm font-medium text-slate-300">Message (edit as needed)</label>
+              <textarea
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                rows={10}
+                className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:border-maroon-accent focus:outline-none focus:ring-2 focus:ring-maroon-accent/25 resize-y"
+                placeholder="Type instructions, deadline, missing requirements, or rejection reason..."
+              />
+
+              <label className="mt-4 block text-sm font-medium text-slate-300">Attachment (optional, max 10MB)</label>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="file"
+                  id="email-attachment"
+                  onChange={onEmailFileChange}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="email-attachment"
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/20 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/10"
+                >
+                  <Paperclip size={18} strokeWidth={2} />
+                  {emailFile ? emailFile.name : 'Choose file'}
+                </label>
+                {emailFile && (
+                  <button
+                    type="button"
+                    onClick={() => setEmailFile(null)}
+                    className="text-xs text-slate-400 hover:text-white"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowEmailModal(false)}
+                  className="rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendEmail}
+                  disabled={sendingEmail || !emailSubject.trim() || !emailBody.trim()}
+                  className="inline-flex items-center gap-2 rounded-xl bg-maroon-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                >
+                  {sendingEmail ? (
+                    <>
+                      <Loader2 size={16} strokeWidth={2} className="animate-spin" />
+                      Sending…
+                    </>
+                  ) : (
+                    <>
+                      <Send size={16} strokeWidth={2} />
+                      Send email
+                    </>
+                  )}
                 </button>
               </div>
             </div>
